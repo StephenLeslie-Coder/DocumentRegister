@@ -1,0 +1,13 @@
+.venv/
+.deps/
+.tools/
+.tmp/
+__pycache__/
+*.py[cod]
+document-scanner.log
+*.log
+samples/
+*.pdf
+*.xlsx
+build/
+dist/
