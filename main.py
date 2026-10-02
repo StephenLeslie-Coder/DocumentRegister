@@ -12,10 +12,11 @@ from src.processing import process_document
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description="Read To, From and Subject from the first page of scanned PDFs")
+    parser = argparse.ArgumentParser(description="Read correspondence fields from page one of scanned PDFs")
     parser.add_argument("input", type=Path, help="A PDF file or a directory containing PDFs")
     parser.add_argument("--register", type=Path, help="Append SUCCESS results to this Excel register")
     parser.add_argument("--tesseract", help="Path to tesseract.exe (or set TESSERACT_CMD)")
+    parser.add_argument("--diagnostics", action="store_true", help="Print raw OCR evidence for development only")
     args = parser.parse_args()
     logging.basicConfig(filename="document-scanner.log", level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
@@ -33,9 +34,15 @@ def main() -> int:
     had_issue = False
     for path in paths:
         result = process_document(path, ocr)
-        print(f"File: {result.file_name}\nTo: {result.to or '[not found]'}"
+        print(f"File: {result.file_name}\nOrigin: {result.origin or '[not found]'}"
+              f"\nTo: {result.to or '[not found]'}"
               f"\nFrom: {result.from_ or '[not found]'}\nSubject: {result.subject or '[not found]'}"
+              f"\nReceipt Date: {result.receipt_date.isoformat() if result.receipt_date else '[not found]'}"
               f"\nStatus: {result.status.value}")
+        if args.diagnostics:
+            print(f"Document Date (diagnostic): {result.document_date.isoformat() if result.document_date else '[not found]'}")
+            print("Origin OCR evidence: " + repr(result.origin_evidence))
+            print("Date-related OCR lines: " + repr(result.receipt_evidence))
         if result.confidence is not None:
             print(f"OCR confidence: {result.confidence:.0%}")
         for warning in result.warnings:

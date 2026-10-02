@@ -1,6 +1,7 @@
 """Real-PDF integration checks; skipped when local Tesseract is unavailable."""
 
 import unittest
+from datetime import date
 from pathlib import Path
 
 import pytesseract
@@ -37,6 +38,12 @@ class SampleIntegrationTests(unittest.TestCase):
                 self.assertTrue(result.from_)
                 self.assertTrue(result.subject)
                 self.assertTrue(result.warnings)
+                self.assertTrue(result.origin)
+                self.assertTrue(result.origin_evidence)
+                self.assertEqual(result.document_date, date(2026, 10, 1) if name == SAMPLE_NAMES[0]
+                                 else date(2026, 9, 24))
+                self.assertEqual(result.receipt_date, None if name == SAMPLE_NAMES[0]
+                                 else date(2026, 9, 30))
 
 
 if __name__ == "__main__":

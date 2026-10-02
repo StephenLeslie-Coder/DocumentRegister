@@ -48,13 +48,16 @@ class TesseractOCR(OCRService):
                 continue
             key = (data["page_num"][i], data["block_num"][i],
                    data["par_num"][i], data["line_num"][i])
-            group = groups.setdefault(key, {"words": [], "scores": [], "top": [], "bottom": []})
+            group = groups.setdefault(key, {"words": [], "scores": [], "top": [], "bottom": [],
+                                            "left": [], "right": []})
             group["words"].append(word)
             score = float(data["conf"][i])
             if score >= 0:
                 group["scores"].append(score)
             group["top"].append(int(data["top"][i]))
             group["bottom"].append(int(data["top"][i]) + int(data["height"][i]))
+            group["left"].append(int(data["left"][i]))
+            group["right"].append(int(data["left"][i]) + int(data["width"][i]))
         lines = []
         for key, group in groups.items():
             top = min(group["top"])
@@ -62,6 +65,7 @@ class TesseractOCR(OCRService):
                 text=" ".join(group["words"]),
                 confidence=sum(group["scores"]) / len(group["scores"]) if group["scores"] else None,
                 top=top, height=max(group["bottom"]) - top, block=key[1],
+                left=min(group["left"]), width=max(group["right"]) - min(group["left"]),
             ))
         lines.sort(key=lambda line: line.top if line.top is not None else 0)
         return OCRResult(lines)

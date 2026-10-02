@@ -29,7 +29,7 @@ class ReviewWindow:
         self.review_paths = [path for path in app.paths
                              if app.outcomes[path].status == DisplayStatus.NEEDS_REVIEW]
         self.index = self.review_paths.index(pdf_path)
-        self.drafts: dict[Path, tuple[str, str, str]] = {}
+        self.drafts: dict[Path, tuple[str, str, str, str, str]] = {}
         self._source_image = None
         self._photo = None
         self._resize_job = None
@@ -67,19 +67,25 @@ class ReviewWindow:
 
         fields = ttk.LabelFrame(panes, text="Extracted information", padding=18)
         fields.columnconfigure(0, weight=1)
-        fields.rowconfigure(8, weight=1)
+        fields.rowconfigure(7, weight=1)
+        self.origin_var = tk.StringVar()
         self.to_var = tk.StringVar()
         self.from_var = tk.StringVar()
-        ttk.Label(fields, text="To").grid(row=0, column=0, sticky="w")
-        ttk.Entry(fields, textvariable=self.to_var).grid(row=1, column=0, sticky="ew", pady=(4, 14))
-        ttk.Label(fields, text="From").grid(row=2, column=0, sticky="w")
-        ttk.Entry(fields, textvariable=self.from_var).grid(row=3, column=0, sticky="ew", pady=(4, 14))
-        ttk.Label(fields, text="Subject").grid(row=4, column=0, sticky="w")
+        self.receipt_var = tk.StringVar()
+        ttk.Label(fields, text="Origin").grid(row=0, column=0, sticky="w")
+        ttk.Entry(fields, textvariable=self.origin_var).grid(row=1, column=0, sticky="ew", pady=(4, 10))
+        ttk.Label(fields, text="To").grid(row=2, column=0, sticky="w")
+        ttk.Entry(fields, textvariable=self.to_var).grid(row=3, column=0, sticky="ew", pady=(4, 10))
+        ttk.Label(fields, text="From").grid(row=4, column=0, sticky="w")
+        ttk.Entry(fields, textvariable=self.from_var).grid(row=5, column=0, sticky="ew", pady=(4, 10))
+        ttk.Label(fields, text="Subject").grid(row=6, column=0, sticky="w")
         self.subject_text = tk.Text(fields, width=34, height=6, wrap="word", font=("Segoe UI", 10))
-        self.subject_text.grid(row=5, column=0, sticky="nsew", pady=(4, 16))
-        ttk.Label(fields, text="Review notes").grid(row=6, column=0, sticky="w")
+        self.subject_text.grid(row=7, column=0, sticky="nsew", pady=(4, 10))
+        ttk.Label(fields, text="Receipt Date (DD-Mon-YYYY)").grid(row=8, column=0, sticky="w")
+        ttk.Entry(fields, textvariable=self.receipt_var).grid(row=9, column=0, sticky="ew", pady=(4, 10))
+        ttk.Label(fields, text="Review notes").grid(row=10, column=0, sticky="w")
         self.warnings_label = ttk.Label(fields, text="", wraplength=350, justify="left")
-        self.warnings_label.grid(row=7, column=0, sticky="nw", pady=(4, 0))
+        self.warnings_label.grid(row=11, column=0, sticky="nw", pady=(4, 0))
         panes.add(fields, weight=2)
 
         footer = ttk.Frame(outer)
@@ -104,17 +110,20 @@ class ReviewWindow:
             self._schedule_preview_resize()
 
     def _save_draft(self):
-        self.drafts[self.pdf_path] = (self.to_var.get(), self.from_var.get(),
-                                      self.subject_text.get("1.0", "end-1c"))
+        self.drafts[self.pdf_path] = (self.origin_var.get(), self.to_var.get(), self.from_var.get(),
+                                      self.subject_text.get("1.0", "end-1c"), self.receipt_var.get())
 
     def _load_current(self):
         self.pdf_path = self.review_paths[self.index]
         result = self.app.outcomes[self.pdf_path].result
-        values = self.drafts.get(self.pdf_path, (result.to, result.from_, result.subject))
-        self.to_var.set(values[0])
-        self.from_var.set(values[1])
+        values = self.drafts.get(self.pdf_path, (result.origin, result.to, result.from_, result.subject,
+                                                 result.receipt_date.strftime("%d-%b-%Y") if result.receipt_date else ""))
+        self.origin_var.set(values[0])
+        self.to_var.set(values[1])
+        self.from_var.set(values[2])
         self.subject_text.delete("1.0", "end")
-        self.subject_text.insert("1.0", values[2])
+        self.subject_text.insert("1.0", values[3])
+        self.receipt_var.set(values[4])
         self.file_label.configure(text=self.pdf_path.name)
         self.window.title(f"Review — {self.pdf_path.name}")
         self.position_label.configure(text=f"{self.index + 1} of {len(self.review_paths)}")
@@ -189,7 +198,8 @@ class ReviewWindow:
         try:
             created = approve_and_save(self.pdf_path, self.app.register,
                                        self.to_var.get(), self.from_var.get(),
-                                       self.subject_text.get("1.0", "end-1c"))
+                                       self.subject_text.get("1.0", "end-1c"),
+                                       self.origin_var.get(), self.receipt_var.get())
         except ValueError as exc:
             messagebox.showwarning(APP_NAME, str(exc), parent=self.window)
             return
@@ -333,8 +343,10 @@ class DocumentRegisterApp:
             path = Path(self.settings.register_path)
             if path.is_file():
                 try:
-                    ExcelRegister(path).validate()
-                    self.register = ExcelRegister(path)
+                    register = ExcelRegister(path)
+                    register.validate()
+                    register.migrate()
+                    self.register = register
                     self.register_label.configure(text=str(path))
                 except Exception:
                     log.exception("Saved register is unavailable")
@@ -416,6 +428,7 @@ class DocumentRegisterApp:
                 candidate.create()
             else:
                 candidate.validate()
+                candidate.migrate()
         except FileExistsError:
             messagebox.showerror(APP_NAME, "That file already exists. Choose a new file name or select it as an existing register.", parent=self.root)
             return

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import date
 from enum import Enum
 
 
@@ -15,6 +16,8 @@ class OCRLine:
     top: int | None = None
     height: int | None = None
     block: int | None = None
+    left: int | None = None
+    width: int | None = None
 
 
 @dataclass(frozen=True)
@@ -35,4 +38,8 @@ class DocumentResult:
     status: Status = Status.NEEDS_REVIEW
     warnings: list[str] = field(default_factory=list)
     confidence: float | None = None  # 0..1; conservative field/OCR estimate
-
+    origin: str = ""
+    receipt_date: date | None = None
+    document_date: date | None = None  # Diagnostic only; never written as Receipt Date.
+    origin_evidence: list[str] = field(default_factory=list)
+    receipt_evidence: list[str] = field(default_factory=list)

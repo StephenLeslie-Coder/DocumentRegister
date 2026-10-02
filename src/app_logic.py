@@ -13,6 +13,7 @@ from .config import APP_DIR_NAME
 from .models import DocumentResult, Status
 from .ocr import OCRService
 from .processing import process_document
+from .receipt import parse_review_date
 
 
 log = logging.getLogger(__name__)
@@ -96,12 +97,19 @@ def process_one(pdf_path: Path, register: ExcelRegister, ocr: OCRService) -> Pro
                               "Unable to write to the Excel register. Close it in Excel and try again.")
 
 
-def approve_and_save(pdf_path: Path, register: ExcelRegister, to: str, from_: str, subject: str) -> bool:
+def approve_and_save(pdf_path: Path, register: ExcelRegister, to: str, from_: str, subject: str,
+                     origin: str = "", receipt_date: str = "") -> bool:
     fields = {"To": re.sub(r"\s+", " ", to).strip(),
               "From": re.sub(r"\s+", " ", from_).strip(),
-              "Subject": re.sub(r"\s+", " ", subject).strip()}
+              "Subject": re.sub(r"\s+", " ", subject).strip(),
+              "Origin": re.sub(r"\s+", " ", origin).strip(),
+              "Receipt Date": receipt_date.strip()}
     missing = [name for name, value in fields.items() if not value]
     if missing:
         raise ValueError("Please fill in: " + ", ".join(missing))
-    result = DocumentResult(pdf_path.name, fields["To"], fields["From"], fields["Subject"], Status.SUCCESS)
+    parsed_date = parse_review_date(fields["Receipt Date"])
+    if parsed_date is None:
+        raise ValueError("Enter Receipt Date as DD-Mon-YYYY, for example 01-Oct-2026.")
+    result = DocumentResult(pdf_path.name, fields["To"], fields["From"], fields["Subject"],
+                            Status.SUCCESS, origin=fields["Origin"], receipt_date=parsed_date)
     return register.append(pdf_path, result)

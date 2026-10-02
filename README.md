@@ -1,6 +1,6 @@
 # Document Register
 
-Document Register reads the first page of scanned PDF correspondence, extracts **To**, **From**, and **Subject**, and writes approved records to an Excel register. Processing stays on the computer. The application does not upload documents or send telemetry.
+Document Register reads the first page of scanned PDF correspondence, extracts **Origin**, **To**, **From**, **Subject**, and a stamped **Receipt Date**, and writes approved records to an Excel register. Processing stays on the computer. The application does not upload documents or send telemetry.
 
 ## END USER
 
@@ -8,7 +8,7 @@ Document Register reads the first page of scanned PDF correspondence, extracts *
 2. Select the folder containing your PDF documents. PDFs in subfolders are not included.
 3. On first launch, select an existing Excel register or create a new one. The register may be in any folder you choose.
 4. Click **Process Documents**.
-5. Review documents marked **Needs Review**. Compare page one with the extracted fields, correct them if needed, and click **Approve & Save**. Use **Previous** and **Next** to move through the review queue.
+5. Review documents marked **Needs Review**. Compare page one with all five extracted fields, correct them if needed, and click **Approve & Save**. Enter Receipt Date as `DD-Mon-YYYY`, for example `01-Oct-2026`. Use **Previous** and **Next** to move through the review queue.
 
 Documents marked **Processed** are saved automatically. **Needs Review** and **Failed** documents are not saved automatically. **Already Processed** documents do not create another row. You can still use **Open PDF** from the review window.
 
@@ -25,7 +25,7 @@ py -m venv .venv
 .\.venv\Scripts\python.exe desktop.py
 ```
 
-The command-line proof of concept is still available:
+The command-line proof of concept is still available. Add `--diagnostics` only while developing; it prints raw OCR evidence and may show sensitive correspondence text.
 
 ```powershell
 .\.venv\Scripts\python.exe main.py "C:\path\to\pdf-or-folder"
@@ -37,7 +37,7 @@ The command-line proof of concept is still available:
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-The tests cover label extraction, OCR variations, PDF sample integration, folder discovery, register creation and duplicate detection, settings, approval validation, and preview scaling. The two real sample PDFs are private development fixtures: they are excluded from the repository and production distribution. To run the PDF integration test on another development computer, place those files in the local `samples` folder first.
+The tests cover label extraction, origin and stamp-date detection, OCR variations, PDF sample integration, folder discovery, register creation and migration, duplicate detection, settings, approval validation, and preview scaling. The two real sample PDFs are private development fixtures: they are excluded from the repository and production distribution. To run the PDF integration test on another development computer, place those files in the local `samples` folder first.
 
 ### Build the portable application
 
@@ -64,15 +64,15 @@ The application and installer versions come from `src/config.py` (`APP_VERSION`)
 
 ### Architecture and application data
 
-`PDF → PyMuPDF first-page render → Pillow preprocessing → OCRService/Tesseract → OCR lines → semantic label extractor → DocumentResult → review/Excel`
+`PDF → PyMuPDF first-page render → Pillow preprocessing → OCRService/Tesseract → OCR lines → correspondence and origin extraction → DocumentResult → review/Excel`. A separate high-contrast OCR pass is used for receipt-stamp detection when needed; it does not replace the normal OCR used for names or subject.
 
-`desktop.py` contains the Tkinter interface and background worker. `src/app_logic.py` handles document discovery, processing decisions, approval, and settings. The OCR and extraction modules remain independent of the GUI. The parser uses semantic labels rather than fixed page coordinates. The review preview renders page one in memory and does not run OCR again.
+`desktop.py` contains the Tkinter interface and background worker. `src/app_logic.py` handles document discovery, processing decisions, approval, and settings. The OCR and extraction modules remain independent of the GUI. The parser uses semantic labels and OCR line context rather than fixed page coordinates. The review preview renders page one in memory and does not run OCR again. Receipt Date is only accepted from a received stamp or a date-only stamp with organizational context; the printed document Date is kept as a diagnostic and never substituted automatically.
 
-Settings contain paths only and are stored in `%APPDATA%\DocumentRegister\settings.json`. Operational logs are stored in `%LOCALAPPDATA%\DocumentRegister\document-register.log`. Neither stores OCR text or extracted fields. Preview images are kept in memory. The Excel register stays wherever the user chooses. Duplicate detection uses filename plus SHA-256, stored in a hidden workbook column.
+Settings contain paths only and are stored in `%APPDATA%\DocumentRegister\settings.json`. Operational logs are stored in `%LOCALAPPDATA%\DocumentRegister\document-register.log`. Neither stores OCR text or extracted fields. Preview images are kept in memory. The Excel register stays wherever the user chooses. Its eight visible columns are File Name, Origin, To, From, Subject, Receipt Date, Processed Date, and Status. Receipt Date is written as an Excel date. Existing seven-column registers are migrated in place while preserving rows and duplicate keys. Duplicate detection uses filename plus SHA-256, stored in a hidden workbook column.
 
 ### Known limitations
 
-- Poor scans, unusual templates, or names spanning multiple lines can require manual review. The review threshold intentionally favors review when extraction is uncertain.
+- Poor scans, unusual templates, names spanning multiple lines, and unclear or missing receipt stamps can require manual review. An approval stamp is not treated as a received stamp. The review threshold intentionally favors review when extraction is uncertain.
 - Unsaved review edits remain in memory only. Closing the application before approval requires reprocessing those PDFs.
 - Avoid concurrent writes to the same workbook. If Excel locks the workbook, close it and retry saving.
 - The installer is not code signed. Test the installer on a clean Windows computer before distributing it to other users.

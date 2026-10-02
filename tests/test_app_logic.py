@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -42,16 +43,25 @@ class AppLogicTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 register.create()
             with self.assertRaises(ValueError):
-                approve_and_save(pdf, register, "Name", "  ", "Subject")
+                approve_and_save(pdf, register, "Name", "  ", "Subject", "Branch", "01-Oct-2026")
+            with self.assertRaises(ValueError):
+                approve_and_save(pdf, register, "Name", "From", "Subject", "", "01-Oct-2026")
+            with self.assertRaises(ValueError):
+                approve_and_save(pdf, register, "Name", "From", "Subject", "Branch", "")
+            with self.assertRaises(ValueError):
+                approve_and_save(pdf, register, "Name", "From", "Subject", "Branch", "31-Feb-2026")
             self.assertFalse(register.contains(pdf))
-            self.assertTrue(approve_and_save(pdf, register, " Corrected To ", "Corrected From", "Corrected\n  Subject"))
+            self.assertTrue(approve_and_save(pdf, register, " Corrected To ", "Corrected From",
+                                             "Corrected\n  Subject", " Public Procurement Branch ", "01-Oct-2026"))
             self.assertTrue(register.contains(pdf))
-            self.assertFalse(approve_and_save(pdf, register, "Corrected To", "Corrected From", "Corrected Subject"))
+            self.assertFalse(approve_and_save(pdf, register, "Corrected To", "Corrected From",
+                                              "Corrected Subject", "Public Procurement Branch", "2026-10-01"))
             book = load_workbook(register.path)
             try:
                 self.assertEqual(book.active.max_row, 2)
-                self.assertEqual([book.active.cell(2, i).value for i in (2, 3, 4)],
-                                 ["Corrected To", "Corrected From", "Corrected Subject"])
+                self.assertEqual([book.active.cell(2, i).value for i in (2, 3, 4, 5)],
+                                 ["Public Procurement Branch", "Corrected To", "Corrected From", "Corrected Subject"])
+                self.assertEqual(book.active.cell(2, 6).value.date(), date(2026, 10, 1))
             finally:
                 book.close()
 
@@ -63,7 +73,8 @@ class AppLogicTests(unittest.TestCase):
             register = ExcelRegister(root / "register.xlsx")
             register.create()
             review = DocumentResult(pdf.name, "To Name", "From Name", "Subject", Status.NEEDS_REVIEW)
-            success = DocumentResult(pdf.name, "To Name", "From Name", "Subject", Status.SUCCESS)
+            success = DocumentResult(pdf.name, "To Name", "From Name", "Subject", Status.SUCCESS,
+                                     origin="Public Procurement Branch", receipt_date=date(2026, 10, 1))
             with patch("src.app_logic.process_document", return_value=review):
                 self.assertEqual(process_one(pdf, register, None).status, DisplayStatus.NEEDS_REVIEW)
             self.assertFalse(register.contains(pdf))
